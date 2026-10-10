@@ -1,0 +1,9 @@
+firmware/build/
+__pycache__/
+*.pyc
+.DS_Store
+*.aux
+*.log
+*.out
+*.fls
+*.fdb_latexmk
