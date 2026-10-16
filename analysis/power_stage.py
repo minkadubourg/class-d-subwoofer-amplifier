@@ -91,3 +91,13 @@ if __name__ == "__main__":
         for k, v in l.items():
             print(f"    {k:26s} {float(v):6.1f} W")
     print(f"\nAllowed per-device dissipation with the chosen 7 C/W heatsink: {max_device_dissipation(7.0):.1f} W")
+
+    # The model takes RDS(on) at TJ = 100 C. Near the 150 C limit it is higher;
+    # read the exact factor from datasheet Fig. 8 (normalised RDS(on) vs TJ).
+    from dataclasses import replace
+    print("\n1/8 power, per-device dissipation vs RDS(on) temperature factor:")
+    for f in (1.5, 1.9, 2.2):
+        m = replace(Mosfet(), rds_hot_factor=f)
+        lo = efficiency(1700.0 / 8, 2.94, m=m, qrr_scales=True)[1] / 4
+        hi = efficiency(1700.0 / 8, 2.94, m=m, qrr_scales=False)[1] / 4
+        print(f"  RDS(on) x {f}: {lo:.1f}-{hi:.1f} W per device")

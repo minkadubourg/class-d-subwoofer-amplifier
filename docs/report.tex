@@ -20,11 +20,11 @@ This report describes a full-bridge class-D amplifier designed to drive a \SI{1.
 
 A bench prototype validated the signal chain and reproduced audio through a small loudspeaker at reduced rail voltage. Its parts were the level shifter, the microcontroller PWM, the pre-amplifier and the H-bridge.
 
-A datasheet-based design analysis then quantifies what the full-power design requires. On a \SI{100}{\volt} rail, \SI{1.7}{\kilo\watt} needs a load of at most \SI{2.94}{\ohm}. The modelled efficiency at rated power is \SI{90.6}{\percent}, but conduction losses would put \SI{44}{\watt} in each device, beyond what the TO-220 FullPAK package can dissipate. At $\tfrac18$ rated power, the selected \SI{7}{\celsius\per\watt} heatsinks are adequate.
+A datasheet-based design analysis then quantifies what the full-power design requires. On a \SI{100}{\volt} rail, \SI{1.7}{\kilo\watt} needs a load of at most \SI{2.94}{\ohm}. The modelled efficiency at rated power is \SI{90.6}{\percent}, but conduction losses would put \SI{44}{\watt} in each device, beyond what the TO-220 FullPAK package can dissipate. At $\tfrac18$ rated power, the selected \SI{7}{\celsius\per\watt} heatsinks are marginal.
 
 The analysis also identifies three design issues and quantifies each. The output filter values as annotated would attenuate the subwoofer band by more than \SI{20}{\decibel}. An op-amp gate drive cannot switch these MOSFETs at \SI{200}{\kilo\hertz}. Open-loop dead-time distortion is large at this switching frequency, about \SI{10}{\percent} THD at \SI{150}{\nano\second}.
 
-The firmware is redesigned to address the timing issues: four timer channels with hardware-placed dead time, ADC sampling synchronised to the PWM, and noise shaping that lifts the in-band SNR of the 7.6-bit modulator from \SI{66}{\decibel} to \SI{99}{\decibel}. A twelve-point characterisation protocol defines how the targets are to be verified.
+The firmware is redesigned to address the timing issues: four timer channels with hardware-placed dead time, ADC sampling synchronised to the PWM, and noise shaping that lifts the in-band SNR of the 7.6-bit modulator from \SI{66}{\decibel} to \SI{98}{\decibel}, where the \SI{12}{bit} ADC becomes the limit. A twelve-point characterisation protocol defines how the targets are to be verified.
 \end{abstract}
 
 \section{Introduction}
@@ -117,7 +117,7 @@ The modelled efficiency at rated power is \SI{90.6}{\percent}, which meets the t
 \[
 P_{\max}=\frac{T_{J,\max}-T_\mathrm{amb}}{R_{\theta JC}+R_{\theta CS}+R_{\theta SA}}=\frac{150-45}{2.62+0.5+7}=\SI{10.4}{\watt}.
 \]
-At $\tfrac18$ power, the usual rating condition for continuous music power, the model gives \SIrange{7.7}{10.1}{\watt} per device, so the selected heatsinks are adequate. At continuous full power, the \SI{44}{\watt} per device would raise the junction \SI{116}{\celsius} above the case through $R_{\theta JC}$ alone, which no heatsink can accommodate.
+At $\tfrac18$ power, a common test condition for music signals, the model gives \SIrange{7.7}{10.1}{\watt} per device with $R_{DS(on)}$ taken at \SI{100}{\celsius}, so the selected heatsinks are marginal. Near \SI{150}{\celsius}, where the junction would actually sit, $R_{DS(on)}$ is higher still: with a factor of 1.9 to 2.2 the upper bound reaches \SIrange{11.3}{12.2}{\watt}, above the limit. The exact factor should be read from the datasheet before the heatsinks are chosen. At continuous full power, the \SI{44}{\watt} per device would raise the junction \SI{116}{\celsius} above the case through $R_{\theta JC}$ alone, which no heatsink can accommodate.
 
 Sustained full power would therefore need lower conduction loss. A MOSFET rated for the actual \SI{100}{\volt} rail, rather than \SI{650}{\volt}, typically offers several times lower $R_{DS(on)}$ and recovery charge. Conduction loss scales linearly with $R_{DS(on)}$.
 
@@ -155,7 +155,7 @@ The redesigned firmware (\texttt{firmware/}) is written against the CMSIS regist
 
 \paragraph{Synchronised sampling.} The timer's update event triggers the ADC twice per PWM period (\SI{400}{\kilo S\per\second}). The conversion interrupt computes the next duty cycle, and preloaded compare registers apply it at the next update without glitches.
 
-\paragraph{Signal processing.} A one-pole DC tracker (about \SI{1}{\hertz}) removes the level-shifter offset without calibration. First-order error-feedback noise shaping moves the quantisation error of the 7.6-bit compare value above the audio band. On the host, the in-band (\SIrange{20}{200}{\hertz}) SNR of the duty-cycle sequence for a \SI{60}{\hertz} tone rises from \SI{65.8}{\decibel} with plain rounding to \SI{98.8}{\decibel} with noise shaping.
+\paragraph{Signal processing.} A one-pole DC tracker (about \SI{1}{\hertz}) removes the level-shifter offset without calibration. First-order error-feedback noise shaping moves the quantisation error of the 7.6-bit compare value above the audio band. On the host, the in-band (\SIrange{20}{200}{\hertz}) SNR of the duty-cycle sequence for a \SI{60}{\hertz} tone rises from \SI{65.5}{\decibel} with plain rounding to \SI{98.2}{\decibel} with noise shaping. With an unquantised input it would reach \SI{127}{\decibel}: once the PWM is noise-shaped, the \SI{12}{bit} ADC sets the limit, and the real converter, whose effective resolution is below \SI{12}{bits}, will set it lower still.
 
 \paragraph{Start-up.} The gate pins are held low as GPIO outputs. They are handed to the timer only after a \SI{500}{\milli\second} settling time, starting at \SI{50}{\percent} duty so that the load sees zero volts.
 
@@ -185,6 +185,7 @@ The prototype demonstrated the complete chain, from audio input through microcon
 The next steps, in order:
 \begin{enumerate}
 \item a bootstrap half-bridge gate driver;
+\item protection before running at full rail voltage: a stalled or halted firmware freezes the duty cycle and can put DC across the subwoofer, so the design needs DC-offset detection with an output relay, a watchdog, and overcurrent shutdown (TIM1 and TIM8 have a hardware break input; TIM2 does not);
 \item MOSFETs rated for the \SI{100}{\volt} rail rather than \SI{650}{\volt};
 \item a correctly dimensioned LC filter;
 \item a two-layer PCB with a tight switching loop to reduce the ringing seen in Fig.~\ref{fig:scope}b;

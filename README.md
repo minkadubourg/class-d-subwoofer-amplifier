@@ -36,7 +36,7 @@ The level shifter, pre-amplifier and gate-drive stages are on breadboard, and th
 
 **1. Load impedance sets the power.** A full bridge delivers at most P = V²/2R. On a 100 V rail, 1.7 kW is reachable only if the subwoofer's minimum impedance is at most 2.94 Ω. Into 4 Ω the limit is 1250 W, and into 8 Ω it is 625 W.
 
-**2. The efficiency target holds; continuous full power does not.** The modelled efficiency at rated power is 90.6%. Conduction loss dominates, and it puts 44 W in each device, more than a TO-220 FullPAK can shed through its 2.62 °C/W junction-to-case resistance. At 1/8 power, the usual music-power rating, the 7 °C/W heatsinks are adequate: 7.7–10.1 W per device against 10.4 W allowed.
+**2. The efficiency target holds; continuous full power does not.** The modelled efficiency at rated power is 90.6%. Conduction dominates the losses: each device dissipates 44 W, 36 W of it in conduction, more than a TO-220 FullPAK can shed through its 2.62 °C/W junction-to-case resistance. At 1/8 power, a common test condition for music signals, the 7 °C/W heatsinks are marginal. With R_DS(on) taken at 100 °C, the model gives 7.7–10.1 W per device against 10.4 W allowed. Near 150 °C, where the junction would actually sit, R_DS(on) is higher still, and with a factor of 1.9–2.2 the upper bound reaches 11.3–12.2 W, above the limit. The exact factor should be read from the datasheet before choosing the heatsinks.
 
 <p align="center"><img src="figures/power_budget.png" width="820" alt="Modelled efficiency and per-device dissipation vs output power"></p>
 
@@ -58,7 +58,7 @@ The level shifter, pre-amplifier and gate-drive stages are on breadboard, and th
 - **Gate timing:** TIM2 runs in centre-aligned mode at 200 kHz, and its four channels drive the four gates (Arduino pins D1, D0, D10, D4). The high- and low-side compare values are placed ±6 counts around each switching point, which gives a 150 ns hardware dead time on every edge. Every switch keeps a minimum on-time for bootstrap refresh.
 - **Synchronised sampling:** the ADC is triggered by the PWM timer at 400 kS/s. The duty cycle is updated in the conversion interrupt through preloaded registers.
 - **DC tracking:** about 1 Hz, so the level-shifter offset needs no calibration.
-- **Noise shaping:** first-order error feedback raises the in-band (20–200 Hz) SNR of the 7.6-bit PWM from 65.8 dB to 98.8 dB.
+- **Noise shaping:** first-order error feedback moves the quantisation error of the 7.6-bit PWM above the audio band. For a 60 Hz tone, the in-band (20–200 Hz) SNR rises from 65.5 dB with plain rounding to 98.2 dB. With an unquantised input it would reach 127 dB, so once the PWM is noise-shaped, the 12-bit ADC sets the limit. The real ADC, whose effective resolution is below 12 bits, will set it lower still (`python analysis/noise_shaping.py`).
 - **Soft start:** the gates are held low, then released at 50% duty, which puts 0 V on the load.
 
 Host-side unit tests check the dead time and minimum on-time on every sample over 10⁶ random inputs, plus the gain of a test tone. **The firmware has not yet been validated on hardware.**
@@ -74,6 +74,7 @@ make -C firmware flash    # st-flash, board connected over ST-LINK
 ```bash
 pip install -r requirements.txt
 python analysis/power_stage.py      # power vs load, loss breakdown, heatsink check
+python analysis/noise_shaping.py    # in-band SNR of the modulator, with and without noise shaping
 python analysis/make_figures.py     # all figures in figures/
 python analysis/thd_from_capture.py capture.csv --f0 60 --load 4   # THD+N and power from a scope/sound-card capture
 ```
@@ -82,6 +83,7 @@ python analysis/thd_from_capture.py capture.csv --f0 60 --load 4   # THD+N and p
 
 ```
 analysis/     power_stage.py (loss and thermal model), pwm_sim.py (filter, dead time),
+              noise_shaping.py (modulator SNR),
               thd_from_capture.py (measurement helper), make_figures.py, block_diagram.py
 docs/         report.pdf / report.tex, test-protocol.md
 firmware/     src/ (main.c, modulator.c, amp_config.h), test/, Makefile, CMSIS headers
@@ -93,10 +95,11 @@ figures/      generated plots
 ## Next steps
 
 1. Fit a bootstrap half-bridge gate driver.
-2. Replace the MOSFETs with devices rated for the 100 V rail rather than 650 V.
-3. Use a correctly dimensioned LC filter.
-4. Move to a two-layer PCB with a tight switching loop.
-5. Add closed-loop feedback.
-6. Run the characterisation protocol.
+2. Add protection before running at full rail voltage. If the firmware stalls, or a debugger halts it, the duty cycle freezes, which can put DC across the subwoofer. This needs DC-offset detection with an output relay, a watchdog, and overcurrent shutdown. TIM1 and TIM8 have a hardware break input for that; TIM2 does not.
+3. Replace the MOSFETs with devices rated for the 100 V rail rather than 650 V.
+4. Use a correctly dimensioned LC filter.
+5. Move to a two-layer PCB with a tight switching loop.
+6. Add closed-loop feedback.
+7. Run the characterisation protocol.
 
 — Minka Dubourg
